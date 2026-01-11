@@ -2,53 +2,11 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
 	"net"
+
+	"github.com/mugiwara999/httpfromtcp/internal/request"
 )
-
-func getLinesChannel(f io.ReadCloser) <-chan string {
-	out := make(chan string, 1)
-
-	go func() {
-		defer close(out)
-		defer f.Close()
-
-		b := make([]byte, 8)
-
-		var line []byte
-
-		for {
-			n, err := f.Read(b)
-
-			if n > 0 {
-				for i := 0; i < n; i++ {
-					ch := b[i]
-
-					if ch == '\n' {
-						if line != nil {
-							out <- fmt.Sprintf("read %s\n", string(line))
-						}
-						line = nil
-					} else {
-						line = append(line, ch)
-					}
-
-				}
-			}
-
-			if err == io.EOF {
-				out <- string(line)
-				break
-			}
-			if err != nil {
-				log.Fatal(err)
-			}
-		}
-	}()
-
-	return out
-}
 
 func main() {
 	listener, err := net.Listen("tcp", ":42069")
@@ -62,8 +20,15 @@ func main() {
 			log.Fatal("error", err)
 		}
 
-		for line := range getLinesChannel(conn) {
-			fmt.Printf("read %s", line)
+		r, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatal("error", err)
 		}
+
+		fmt.Println("Request line:")
+		fmt.Println("- Method:", r.RequestLine.Method)
+		fmt.Println("- Target:", r.RequestLine.RequestTarget)
+		fmt.Println("- Version:", r.RequestLine.HttpVersion)
+
 	}
 }
