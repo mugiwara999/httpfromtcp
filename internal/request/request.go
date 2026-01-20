@@ -108,7 +108,6 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		acc = acc[i:]
 
 		if err == io.EOF {
-
 			if r.Status != RequestStateDone {
 				return nil, ERROR_INCOMPLETE_REQUEST
 			}

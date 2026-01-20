@@ -17,18 +17,23 @@ func main() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Fatal("error", err)
+			log.Println("accept error:", err)
+			continue // keep server alive
 		}
 
-		r, err := request.RequestFromReader(conn)
-		if err != nil {
-			log.Fatal("error", err)
-		}
+		go func(c net.Conn) {
+			defer c.Close()
 
-		fmt.Println("Request line:")
-		fmt.Println("- Method:", r.RequestLine.Method)
-		fmt.Println("- Target:", r.RequestLine.RequestTarget)
-		fmt.Println("- Version:", r.RequestLine.HttpVersion)
+			r, err := request.RequestFromReader(c)
+			if err != nil {
+				log.Println("request parse error:", err)
+				return
+			}
 
+			fmt.Println("Request line:")
+			fmt.Println("- Method:", r.RequestLine.Method)
+			fmt.Println("- Target:", r.RequestLine.RequestTarget)
+			fmt.Println("- Version:", r.RequestLine.HttpVersion)
+		}(conn)
 	}
 }
