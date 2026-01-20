@@ -16,7 +16,7 @@ var sep = []byte("\r\n")
 
 var (
 	ErrorNoFieldName      = fmt.Errorf("no field name: malformed request")
-	ErrorInvalidFiledName = fmt.Errorf("invalid field name")
+	ErrorInvalidFieldName = fmt.Errorf("invalid field name")
 	ErrorInvalidCharacter = fmt.Errorf("invalid character")
 )
 
@@ -84,7 +84,7 @@ func parseHeader(line []byte) (string, string, error) {
 	}
 
 	if !isValidFieldName(fieldName) {
-		return "", "", ErrorInvalidFiledName
+		return "", "", ErrorInvalidFieldName
 	}
 	return string(fieldName), string(fieldValue), nil
 }

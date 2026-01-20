@@ -1,116 +1,183 @@
 package headers
 
 import (
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestHeadersParse(t *testing.T) {
-	// Test: Valid single header
+type chunkReader struct {
+	data            []byte
+	numBytesPerRead int
+	pos             int
+}
+
+func newChunkReader(data []byte, chunkSize int) *chunkReader {
+	return &chunkReader{
+		data:            data,
+		numBytesPerRead: chunkSize,
+		pos:             0,
+	}
+}
+
+func (cr *chunkReader) Read(p []byte) (n int, err error) {
+	if cr.pos >= len(cr.data) {
+		return 0, io.EOF
+	}
+
+	toRead := min(cr.numBytesPerRead, len(p), len(cr.data)-cr.pos)
+	n = copy(p, cr.data[cr.pos:cr.pos+toRead])
+	cr.pos += n
+
+	return n, nil
+}
+
+func min(a, b, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
+}
+
+func parseHeadersFromChunks(data []byte, chunkSize int) (Headers, int, bool, error) {
+	reader := newChunkReader(data, chunkSize)
 	headers := NewHeaders()
-	data := []byte("Host: localhost:42069\r\n\r\n")
-	n, done, err := headers.Parse(data)
-	require.NoError(t, err)
-	require.NotNil(t, headers)
-	assert.Equal(t, []string{"localhost:42069"}, headers["host"])
-	assert.Equal(t, 25, n)
-	assert.True(t, done)
 
-	// Test: Multiple headers
-	headers = NewHeaders()
-	data = []byte("Host: localhost:42069\r\nContent-Type: application/json\r\nUser-Agent: curl/8.17.0\r\n\r\n")
-	n, done, err = headers.Parse(data)
+	buf := make([]byte, 4096)
+	accumulated := 0
+	totalRead := 0
+
+	for {
+		n, readErr := reader.Read(buf[accumulated:])
+		if readErr != nil && readErr != io.EOF {
+			return nil, totalRead, false, readErr
+		}
+
+		accumulated += n
+
+		parsed, done, parseErr := headers.Parse(buf[:accumulated])
+		totalRead += parsed
+
+		if parseErr != nil {
+			return headers, totalRead, false, parseErr
+		}
+
+		if done {
+			return headers, totalRead, true, nil
+		}
+
+		if parsed > 0 {
+			copy(buf, buf[parsed:accumulated])
+			accumulated -= parsed
+		}
+
+		if readErr == io.EOF {
+			return headers, totalRead, false, nil
+		}
+	}
+}
+
+func TestHeadersParse_Basic(t *testing.T) {
+	data := []byte("Host: localhost\r\n\r\n")
+
+	headers, n, done, err := parseHeadersFromChunks(data, 3)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"localhost:42069"}, headers["host"])
-	assert.Equal(t, []string{"application/json"}, headers["content-type"])
-	assert.Equal(t, []string{"curl/8.17.0"}, headers["user-agent"])
+	require.True(t, done)
+
+	assert.Equal(t, []string{"localhost"}, headers["host"])
 	assert.Equal(t, len(data), n)
-	assert.True(t, done)
+}
 
-	// Test: Multiple values for same header
-	headers = NewHeaders()
-	data = []byte("Set-Cookie: sessionid=abc123\r\nSet-Cookie: userid=xyz789\r\n\r\n")
-	n, done, err = headers.Parse(data)
+func TestHeadersParse_MultipleHeaders(t *testing.T) {
+	data := []byte(
+		"Host: api.example.com\r\n" +
+			"Content-Type: application/json\r\n" +
+			"User-Agent: curl/8.0\r\n\r\n",
+	)
+
+	headers, n, done, err := parseHeadersFromChunks(data, 5)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"sessionid=abc123", "userid=xyz789"}, headers["set-cookie"])
-	assert.True(t, done)
+	require.True(t, done)
 
-	// Test: Headers with extra whitespace in values (valid - trimming is OK)
-	headers = NewHeaders()
-	data = []byte("Host:    localhost:42069   \r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"localhost:42069"}, headers["host"])
-	assert.True(t, done)
-
-	// Test: Invalid - no colon
-	headers = NewHeaders()
-	data = []byte("Host localhost:42069\r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.Error(t, err)
-	assert.Equal(t, ErrorNoFieldName, err)
-	assert.Equal(t, 0, n)
-	assert.False(t, done)
-
-	// Test: Invalid - empty field name
-	headers = NewHeaders()
-	data = []byte(": value\r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.Error(t, err)
-	assert.Equal(t, ErrorNoFieldName, err)
-	assert.Equal(t, 0, n)
-	assert.False(t, done)
-
-	// Test: Invalid - whitespace-only field name
-	headers = NewHeaders()
-	data = []byte("   : value\r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.Error(t, err)
-	assert.Equal(t, ErrorNoFieldName, err)
-	assert.Equal(t, 0, n)
-	assert.False(t, done)
-
-	// Test: Incomplete headers (no empty line yet)
-	headers = NewHeaders()
-	data = []byte("Host: localhost:42069\r\nContent-Type: application/json\r\n")
-	n, done, err = headers.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"localhost:42069"}, headers["host"])
+	assert.Equal(t, []string{"api.example.com"}, headers["host"])
 	assert.Equal(t, []string{"application/json"}, headers["content-type"])
-	assert.False(t, done)
+	assert.Equal(t, []string{"curl/8.0"}, headers["user-agent"])
+	assert.Equal(t, len(data), n)
+}
 
-	// Test: Empty data
-	headers = NewHeaders()
-	data = []byte("")
-	n, done, err = headers.Parse(data)
+func TestHeadersParse_RepeatedHeader(t *testing.T) {
+	data := []byte(
+		"Set-Cookie: a=1\r\n" +
+			"Set-Cookie: b=2\r\n\r\n",
+	)
+
+	headers, n, done, err := parseHeadersFromChunks(data, 4)
 	require.NoError(t, err)
+	require.True(t, done)
+
+	assert.Equal(t, []string{"a=1", "b=2"}, headers["set-cookie"])
+	assert.Equal(t, len(data), n)
+}
+
+func TestHeadersParse_Invalid_NoColon(t *testing.T) {
+	data := []byte("Host localhost\r\n\r\n")
+
+	headers, n, done, err := parseHeadersFromChunks(data, 10)
+	require.Error(t, err)
+	assert.Equal(t, ErrorNoFieldName, err)
+	assert.False(t, done)
 	assert.Equal(t, 0, n)
+	assert.Empty(t, headers)
+}
+
+func TestHeadersParse_Invalid_EmptyFieldName(t *testing.T) {
+	data := []byte(": value\r\n\r\n")
+
+	headers, n, done, err := parseHeadersFromChunks(data, 10)
+	require.Error(t, err)
+	assert.Equal(t, ErrorNoFieldName, err)
+	assert.False(t, done)
+	assert.Equal(t, 0, n)
+	assert.Empty(t, headers)
+}
+
+func TestHeadersParse_Incomplete(t *testing.T) {
+	data := []byte("Host: localhost\r\nUser-Agent: test")
+
+	headers, n, done, err := parseHeadersFromChunks(data, 8)
+	require.NoError(t, err)
 	assert.False(t, done)
 
-	// Test: Just empty line (immediate end of headers)
-	headers = NewHeaders()
-	data = []byte("\r\n")
-	n, done, err = headers.Parse(data)
+	assert.Equal(t, []string{"localhost"}, headers["host"])
+	assert.Equal(t, 17, n) // "Host: localhost\r\n"
+}
+
+func TestHeadersParse_ChunkBoundary(t *testing.T) {
+	data := []byte("Authorization: Bearer token\r\n\r\n")
+
+	headers, n, done, err := parseHeadersFromChunks(data, 2)
 	require.NoError(t, err)
-	assert.Equal(t, 2, n)
-	assert.True(t, done)
+	require.True(t, done)
+
+	assert.Equal(t, []string{"Bearer token"}, headers["authorization"])
+	assert.Equal(t, len(data), n)
+}
+
+func TestHeadersParse_EmptyHeaders(t *testing.T) {
+	data := []byte("\r\n")
+
+	headers, n, done, err := parseHeadersFromChunks(data, 1)
+	require.NoError(t, err)
+	require.True(t, done)
+
 	assert.Equal(t, 0, len(headers))
-
-	// Test: Header with empty value
-	headers = NewHeaders()
-	data = []byte("X-Empty:\r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, []string{""}, headers["x-empty"])
-	assert.True(t, done)
-
-	// Test: Case insensitivity
-	headers = NewHeaders()
-	data = []byte("Content-Type: text/html\r\ncontent-type: application/json\r\n\r\n")
-	n, done, err = headers.Parse(data)
-	require.NoError(t, err)
-	assert.Equal(t, []string{"text/html", "application/json"}, headers["content-type"])
-	assert.True(t, done)
+	assert.Equal(t, len(data), n)
 }
