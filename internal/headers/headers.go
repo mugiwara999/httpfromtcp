@@ -3,7 +3,6 @@ package headers
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"strings"
 )
 
@@ -54,6 +53,17 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	}
 }
 
+func (h Headers) Get(name string) ([]string, bool) {
+	n, ok := h[strings.ToLower(name)]
+	return n, ok
+}
+
+func (h Headers) ForEach(cb func(string, []string)) {
+	for n, v := range h {
+		cb(n, v)
+	}
+}
+
 func isValidFieldName(name []byte) bool {
 	for _, b := range name {
 		// RFC 7230 token chars: ! # $ % & ' * + - . 0-9 A-Z ^ _ ` a-z | ~
@@ -71,12 +81,6 @@ func parseHeader(line []byte) (string, string, error) {
 	parts := bytes.SplitN(line, []byte(":"), 2)
 
 	if len(parts) != 2 {
-		log.Printf("hey")
-		log.Println(len(parts))
-		for i := range parts {
-			log.Printf("part %v = %s", i, string(parts[i]))
-		}
-
 		return "", "", ErrorNoFieldName
 	}
 

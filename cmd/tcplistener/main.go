@@ -37,9 +37,9 @@ func main() {
 
 			fmt.Println("Headers:")
 
-			for i, v := range r.Headers {
-				fmt.Printf("- %s: %v\n", i, v)
-			}
+			r.Headers.ForEach(func(s string, v []string) {
+				fmt.Printf("- %s: %v", s, v)
+			})
 
 			c.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
 		}(conn)
