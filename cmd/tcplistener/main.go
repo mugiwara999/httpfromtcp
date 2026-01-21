@@ -18,7 +18,7 @@ func main() {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Println("accept error:", err)
-			continue // keep server alive
+			continue
 		}
 
 		go func(c net.Conn) {
@@ -34,6 +34,14 @@ func main() {
 			fmt.Println("- Method:", r.RequestLine.Method)
 			fmt.Println("- Target:", r.RequestLine.RequestTarget)
 			fmt.Println("- Version:", r.RequestLine.HttpVersion)
+
+			fmt.Println("Headers:")
+
+			for i, v := range r.Headers {
+				fmt.Printf("- %s: %v\n", i, v)
+			}
+
+			c.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
 		}(conn)
 	}
 }
