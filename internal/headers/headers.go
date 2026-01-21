@@ -76,6 +76,7 @@ func parseHeader(line []byte) (string, string, error) {
 		for i := range parts {
 			log.Printf("part %v = %s", i, string(parts[i]))
 		}
+
 		return "", "", ErrorNoFieldName
 	}
 
