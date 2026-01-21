@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -70,6 +71,11 @@ func parseHeader(line []byte) (string, string, error) {
 	parts := bytes.SplitN(line, []byte(":"), 2)
 
 	if len(parts) != 2 {
+		log.Printf("hey")
+		log.Println(len(parts))
+		for i := range parts {
+			log.Printf("part %v = %s", i, string(parts[i]))
+		}
 		return "", "", ErrorNoFieldName
 	}
 

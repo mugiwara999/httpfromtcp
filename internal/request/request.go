@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/mugiwara999/httpfromtcp/internal/headers"
 )
@@ -13,6 +14,7 @@ type parseRequestState string
 const (
 	RequestStateInit parseRequestState = "init"
 	HeadersState     parseRequestState = "headers"
+	BodyState        parseRequestState = "body"
 	RequestStateDone parseRequestState = "done"
 )
 
@@ -25,6 +27,7 @@ type RequestLine struct {
 type Request struct {
 	RequestLine RequestLine
 	Headers     headers.Headers
+	Body        []byte
 	Status      parseRequestState
 }
 
@@ -54,7 +57,9 @@ func (r *Request) parse(data []byte) (int, error) {
 		r.Status = HeadersState
 		totalConsumed += n
 
-		return r.parse(data[n:])
+		i, err := r.parse(data[n:])
+
+		return i + totalConsumed, err
 
 	case HeadersState:
 		if r.Headers == nil {
@@ -70,9 +75,30 @@ func (r *Request) parse(data []byte) (int, error) {
 
 		if done {
 			r.Status = RequestStateDone
+			if n, ok := r.Headers["content-length"]; ok && len(n) > 0 {
+				r.Status = BodyState
+			}
 		}
 
 		return totalConsumed, nil
+
+	case BodyState:
+
+		n := r.Headers["content-length"]
+		l, _ := strconv.Atoi(n[0])
+
+		if len(r.Body) == l {
+			r.Status = RequestStateDone
+			return r.parse(data)
+		}
+
+		if len(r.Body) > l {
+			return len(data), ERROR_INCOMPLETE_REQUEST
+		}
+
+		toConsume := min(len(data), l-len(r.Body))
+		r.Body = append(r.Body, data[:toConsume]...)
+		return toConsume, nil
 
 	case RequestStateDone:
 		return 0, nil
@@ -112,6 +138,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	r := &Request{
 		Status:  RequestStateInit,
 		Headers: headers.NewHeaders(),
+		Body:    []byte{},
 	}
 
 	buf := make([]byte, 4096)
