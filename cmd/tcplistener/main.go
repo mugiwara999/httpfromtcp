@@ -38,8 +38,14 @@ func main() {
 			fmt.Println("Headers:")
 
 			r.Headers.ForEach(func(s string, v []string) {
-				fmt.Printf("- %s: %v", s, v)
+				fmt.Printf("- %s: %v\n", s, v)
 			})
+
+			_, ok := r.Headers.Get("Content-Length")
+			if ok {
+				fmt.Println("Body:")
+				fmt.Println(string(r.Body))
+			}
 
 			c.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nOK"))
 		}(conn)

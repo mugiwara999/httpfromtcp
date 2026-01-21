@@ -87,17 +87,19 @@ func (r *Request) parse(data []byte) (int, error) {
 		n := r.Headers["content-length"]
 		l, _ := strconv.Atoi(n[0])
 
-		if len(r.Body) == l {
-			r.Status = RequestStateDone
-			return r.parse(data)
-		}
-
 		if len(r.Body) > l {
 			return len(data), ERROR_INCOMPLETE_REQUEST
 		}
 
 		toConsume := min(len(data), l-len(r.Body))
 		r.Body = append(r.Body, data[:toConsume]...)
+
+		if len(r.Body) == l {
+			r.Status = RequestStateDone
+			i, j := r.parse(data)
+			return i + toConsume, j
+		}
+
 		return toConsume, nil
 
 	case RequestStateDone:
