@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"sync/atomic"
+
+	"github.com/mugiwara999/httpfromtcp/internal/response"
 )
 
 type Server struct {
@@ -14,13 +16,9 @@ type Server struct {
 func runConnection(conn net.Conn) {
 	defer conn.Close()
 
-	conn.Write([]byte(
-		"HTTP/1.1 200 OK\r\n" +
-			"Content-Type: text/plain\r\n" +
-			"Content-Length: 13\r\n" +
-			"\r\n" +
-			"Hello World!\n",
-	))
+	response.WriteStatusLine(conn, response.StatusOK)
+	headers := response.GetDefaultHeader(0)
+	response.WriteHeaders(conn, headers)
 }
 
 func Serve(port uint16) (*Server, error) {
