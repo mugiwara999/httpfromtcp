@@ -51,10 +51,10 @@ func WriteHeaders(w io.Writer, h headers.Headers) error {
 			for i := 1; i < len(v); i++ {
 				b = append(b, fmt.Appendf(nil, ", %s", v[i])...)
 			}
-			_, err := w.Write(b)
+			w.Write(b)
 		} else {
 			mess := fmt.Sprintf("%s: %s", n, v[0])
-			_, err := w.Write([]byte(mess))
+			w.Write([]byte(mess))
 		}
 		w.Write([]byte("\r\n"))
 	}

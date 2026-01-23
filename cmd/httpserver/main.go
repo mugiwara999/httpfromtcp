@@ -18,7 +18,17 @@ func main() {
 	handler := func(w io.Writer, req *request.Request) *server.HandlerError {
 		body := "Hello from POST!\n"
 
-		response.WriteStatusLine(w, response.StatusOK)
+		status := response.StatusOK
+		switch req.RequestLine.RequestTarget {
+		case "/yourproblem":
+			status = response.StatusBadRequest
+			body = ""
+		case "/myproblem":
+			status = response.StatusInternalServerError
+			body = ""
+		}
+
+		response.WriteStatusLine(w, status)
 
 		headers := response.GetDefaultHeader(len(body))
 		response.WriteHeaders(w, headers)
@@ -30,6 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
+	log.Println("Server started on port", port)
 	defer server.Close()
 
 	sigChan := make(chan os.Signal, 1)
