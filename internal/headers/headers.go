@@ -58,6 +58,10 @@ func (h Headers) Get(name string) ([]string, bool) {
 	return n, ok
 }
 
+func (h Headers) Set(name, value string) {
+	h[name] = []string{value}
+}
+
 func (h Headers) ForEach(cb func(string, []string)) {
 	for n, v := range h {
 		cb(n, v)
