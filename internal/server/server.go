@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -17,7 +16,7 @@ type Server struct {
 	Handler  Handler
 }
 
-type Handler func(w io.Writer, req *request.Request) *HandlerError
+type Handler func(w *response.Writer, req *request.Request) *HandlerError
 
 type HandlerError struct {
 	Status  response.StatusCode
@@ -28,31 +27,29 @@ func (s *Server) runConnection(conn net.Conn) {
 	defer conn.Close()
 
 	req, err := request.RequestFromReader(conn)
+	w := response.NewWriter()
 	if err != nil {
-		WriteHandlerError(conn, &HandlerError{
+		WriteHandlerError(w, &HandlerError{
 			Status:  response.StatusBadRequest,
 			Message: "Bad Request",
 		})
-		return
+		goto copy
 	}
 	if req == nil {
-		WriteHandlerError(conn, &HandlerError{
+		WriteHandlerError(w, &HandlerError{
 			Status:  response.StatusBadRequest,
 			Message: "Bad Request",
 		})
-		return
+		goto copy
 	}
 
-	// Create a buffer for the handler to write to
-	buf := new(bytes.Buffer)
-
-	if herr := s.Handler(buf, req); herr != nil {
-		WriteHandlerError(conn, herr)
-		return
+	if herr := s.Handler(w, req); herr != nil {
+		WriteHandlerError(w, herr)
+		goto copy
 	}
 
-	// Write the buffered response to the connection
-	_, err = io.Copy(conn, buf)
+copy:
+	_, err = io.Copy(conn, w)
 	if err != nil {
 		return
 	}

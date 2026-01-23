@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -15,25 +14,25 @@ import (
 const port = 42069
 
 func main() {
-	handler := func(w io.Writer, req *request.Request) *server.HandlerError {
-		body := "Hello from POST!\n"
+	handler := func(w *response.Writer, req *request.Request) *server.HandlerError {
+		body := "<html><head>    <title>200 OK</title>  </head>  <body>    <h1>Success!</h1>    <p>Your request was an absolute banger.</p>  </body></html>"
 
 		status := response.StatusOK
 		switch req.RequestLine.RequestTarget {
 		case "/yourproblem":
 			status = response.StatusBadRequest
-			body = ""
+			body = "<html><head><title>400 Bad Request</title></head><body><h1>Bad Request</h1><p>Your request honestly kinda sucked.</p></body></html>"
 		case "/myproblem":
 			status = response.StatusInternalServerError
-			body = ""
+			body = "<html><head><title>500 Internal Server Error</title>  </head>  <body>    <h1>Internal Server Error</h1>    <p>Okay, you know what? This one is on me.</p>  </body></html>"
 		}
 
-		response.WriteStatusLine(w, status)
+		w.WriteStatusLine(status)
+		h := response.GetDefaultHeader(len(body))
+		h.Set("content-type", "text/html")
+		w.WriteHeaders(h)
+		w.WriteBody([]byte(body))
 
-		headers := response.GetDefaultHeader(len(body))
-		response.WriteHeaders(w, headers)
-
-		w.Write([]byte(body))
 		return nil
 	}
 	server, err := server.Serve(port, handler)
