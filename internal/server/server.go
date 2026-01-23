@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -42,8 +43,18 @@ func (s *Server) runConnection(conn net.Conn) {
 		return
 	}
 
-	if herr := s.Handler(conn, req); herr != nil {
+	// Create a buffer for the handler to write to
+	buf := new(bytes.Buffer)
+
+	if herr := s.Handler(buf, req); herr != nil {
 		WriteHandlerError(conn, herr)
+		return
+	}
+
+	// Write the buffered response to the connection
+	_, err = io.Copy(conn, buf)
+	if err != nil {
+		return
 	}
 }
 
