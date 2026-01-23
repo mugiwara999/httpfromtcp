@@ -75,8 +75,14 @@ func (r *Request) parse(data []byte) (int, error) {
 
 		if done {
 			r.Status = RequestStateDone
-			if n, ok := r.Headers["content-length"]; ok && len(n) > 0 {
+			if cl, ok := r.Headers["content-length"]; ok && len(cl) > 0 {
 				r.Status = BodyState
+				// Continue parsing body if we have more data after headers
+				remainingData := data[n:]
+				if len(remainingData) > 0 {
+					i, err := r.parse(remainingData)
+					return i + totalConsumed, err
+				}
 			}
 		}
 
@@ -96,8 +102,7 @@ func (r *Request) parse(data []byte) (int, error) {
 
 		if len(r.Body) == l {
 			r.Status = RequestStateDone
-			i, j := r.parse(data)
-			return i + toConsume, j
+			return toConsume, nil
 		}
 
 		return toConsume, nil
@@ -147,19 +152,23 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	acc := []byte{}
 
 	for r.Status != RequestStateDone {
-		n, err := reader.Read(buf)
+		if len(acc) > 0 {
+			consumed, parseErr := r.parse(acc)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			if consumed > 0 {
+				acc = acc[consumed:]
+			}
+		}
 
+		if r.Status == RequestStateDone {
+			break
+		}
+
+		n, err := reader.Read(buf)
 		if n > 0 {
 			acc = append(acc, buf[:n]...)
-		}
-
-		consumed, parseErr := r.parse(acc)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-
-		if consumed > 0 {
-			acc = acc[consumed:]
 		}
 
 		if err == io.EOF {
