@@ -3,7 +3,6 @@ package response
 import (
 	"fmt"
 	"io"
-	"log"
 	"strconv"
 
 	"github.com/mugiwara999/httpfromtcp/internal/headers"
@@ -53,16 +52,9 @@ func WriteHeaders(w io.Writer, h headers.Headers) error {
 				b = append(b, fmt.Appendf(nil, ", %s", v[i])...)
 			}
 			_, err := w.Write(b)
-			if err != nil {
-				log.Printf("error in loop = %s", err)
-			}
 		} else {
 			mess := fmt.Sprintf("%s: %s", n, v[0])
-			log.Printf("message = %s", mess)
 			_, err := w.Write([]byte(mess))
-			if err != nil {
-				log.Println("error =%s", err)
-			}
 		}
 		w.Write([]byte("\r\n"))
 	}

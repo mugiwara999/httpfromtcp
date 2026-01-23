@@ -3,7 +3,6 @@ package server
 import (
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"sync/atomic"
 
@@ -42,12 +41,6 @@ func (s *Server) runConnection(conn net.Conn) {
 		})
 		return
 	}
-
-	log.Println(req.RequestLine.HttpVersion)
-	log.Println(req.RequestLine.Method)
-	log.Println(req.RequestLine.RequestTarget)
-	log.Println(req.Headers)
-	log.Println(string(req.Body))
 
 	if herr := s.Handler(conn, req); herr != nil {
 		WriteHandlerError(conn, herr)
