@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 
 	"github.com/mugiwara999/httpfromtcp/internal/headers"
@@ -76,13 +77,20 @@ func (r *Request) parse(data []byte) (int, error) {
 		if done {
 			r.Status = RequestStateDone
 			if cl, ok := r.Headers["content-length"]; ok && len(cl) > 0 {
-				r.Status = BodyState
-				// Continue parsing body if we have more data after headers
-				remainingData := data[n:]
-				if len(remainingData) > 0 {
-					i, err := r.parse(remainingData)
-					return i + totalConsumed, err
+
+				l, _ := strconv.Atoi(cl[0])
+
+				if l > 0 {
+
+					r.Status = BodyState
+					// Continue parsing body if we have more data after headers
+					remainingData := data[n:]
+					if len(remainingData) > 0 {
+						i, err := r.parse(remainingData)
+						return i + totalConsumed, err
+					}
 				}
+
 			}
 		}
 
@@ -173,6 +181,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 
 		if err == io.EOF {
 			if r.Status != RequestStateDone {
+				log.Println(r.Status)
 				return nil, ERROR_INCOMPLETE_REQUEST
 			}
 			break
