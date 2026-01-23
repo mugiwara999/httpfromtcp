@@ -2,26 +2,59 @@ package server
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"sync/atomic"
 
+	"github.com/mugiwara999/httpfromtcp/internal/request"
 	"github.com/mugiwara999/httpfromtcp/internal/response"
 )
 
 type Server struct {
 	Listener net.Listener
 	Closed   atomic.Bool
+	Handler  Handler
 }
 
-func runConnection(conn net.Conn) {
+type Handler func(w io.Writer, req *request.Request) *HandlerError
+
+type HandlerError struct {
+	Status  response.StatusCode
+	Message string
+}
+
+func (s *Server) runConnection(conn net.Conn) {
 	defer conn.Close()
 
-	response.WriteStatusLine(conn, response.StatusOK)
-	headers := response.GetDefaultHeader(0)
-	response.WriteHeaders(conn, headers)
+	req, err := request.RequestFromReader(conn)
+	if err != nil {
+		WriteHandlerError(conn, &HandlerError{
+			Status:  response.StatusBadRequest,
+			Message: "Bad Request",
+		})
+		return
+	}
+	if req == nil {
+		WriteHandlerError(conn, &HandlerError{
+			Status:  response.StatusBadRequest,
+			Message: "Bad Request",
+		})
+		return
+	}
+
+	log.Println(req.RequestLine.HttpVersion)
+	log.Println(req.RequestLine.Method)
+	log.Println(req.RequestLine.RequestTarget)
+	log.Println(req.Headers)
+	log.Println(string(req.Body))
+
+	if herr := s.Handler(conn, req); herr != nil {
+		WriteHandlerError(conn, herr)
+	}
 }
 
-func Serve(port uint16) (*Server, error) {
+func Serve(port uint16, handler Handler) (*Server, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {
 		return nil, err
@@ -29,6 +62,7 @@ func Serve(port uint16) (*Server, error) {
 
 	server := &Server{
 		Listener: listener,
+		Handler:  handler,
 	}
 
 	go server.Listen()
@@ -52,7 +86,7 @@ func (s *Server) Listen() {
 			continue
 		}
 
-		go runConnection(conn)
+		go s.runConnection(conn)
 
 	}
 }
