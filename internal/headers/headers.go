@@ -71,6 +71,15 @@ func (h Headers) Delete(name string) {
 	delete(h, name)
 }
 
+func (h Headers) Replace(name, value string) {
+	if _, ok := h.Get(name); ok {
+		h.Delete(name)
+		h.Set(name, value)
+	} else {
+		h.Set(name, value)
+	}
+}
+
 func (h Headers) ForEach(cb func(string, []string)) {
 	for n, v := range h {
 		cb(n, v)
