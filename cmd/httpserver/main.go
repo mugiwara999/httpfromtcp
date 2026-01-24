@@ -80,6 +80,20 @@ func main() {
 				return nil
 			}
 
+		} else if req.RequestLine.RequestTarget == "/video" {
+			f, err := os.ReadFile("./assets/vim.mp4")
+			if err != nil {
+				return nil
+			}
+
+			h := response.GetDefaultHeader(0)
+			h.Delete("content-length")
+			h.Replace("content-type", "video/mp4")
+			w.WriteStatusLine(200)
+			w.WriteHeaders(h)
+			w.Write(f)
+			return nil
+
 		}
 
 		w.WriteStatusLine(status)
