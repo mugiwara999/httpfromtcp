@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -34,78 +33,53 @@ func main() {
 			body = "<html><head><title>500 Internal Server Error</title></head><body><h1>Internal Server Error</h1><p>Okay, you know what? This one is on me.</p></body></html>"
 
 		} else if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
-			target := strings.TrimPrefix(req.RequestLine.RequestTarget, "/httpbin/")
-			url := "https://httpbin.org/" + target
 
-			res, err := http.Get(url)
+			target := req.RequestLine.RequestTarget
+
+			res, err := http.Get("https://httpbin.org/" + target[len("/httpbin/"):])
+
 			if err != nil {
+
 				status = response.StatusInternalServerError
 				body = "<html><head><title>500 Internal Server Error</title></head><body><h1>Internal Server Error</h1><p>Okay, you know what? This one is on me.</p></body></html>"
+				log.Println(err)
 			} else {
-				defer res.Body.Close()
 
 				w.WriteStatusLine(response.StatusOK)
-
-				h := response.GetDefaultHeader(0)
+				h := response.GetDefaultHeader(len(body))
 				h.Delete("content-length")
-				h.Set("transfer-encoding", "chunked")
-				
-				contentType := res.Header.Get("Content-Type")
-				if contentType == "" {
-					contentType = "text/plain"
-				}
-				h.Set("content-type", contentType)
-
-				h.Set("trailer", "X-Content-SHA256, X-Content-Length")
-
+				h.Set("Transfer-encoding", "chunked")
+				h.Set("content-type", "text/plain")
+				h.Set("Trialer", "X-content-sha256")
+				h.Set("Trialer", "X-Content-Length")
 				w.WriteHeaders(h)
 
-				buf := make([]byte, 1024)
-				var fullBody []byte
+				fullBody := []byte{}
 
 				for {
-					n, err := res.Body.Read(buf)
-					if n > 0 {
-						fullBody = append(fullBody, buf[:n]...)
-						
-						_, writeErr := w.WriteChunkedBody(buf[:n])
-						if writeErr != nil {
-							return &server.HandlerError{
-								Status:  response.StatusInternalServerError,
-								Message: "Error writing chunked response",
-							}
-						}
-					}
+					data := make([]byte, 32)
+					n, err := res.Body.Read(data)
+					defer res.Body.Close()
 					if err != nil {
 						break
 					}
+
+					fullBody = append(fullBody, data[:n]...)
+					w.Write(fmt.Appendf(nil, "%x\r\n", n))
+					w.Write(data[:n])
+					w.Write([]byte("\r\n"))
 				}
+				w.Write([]byte("0\r\n"))
 
-				_, err = w.WriteChunkedBodyDone()
-				if err != nil {
-					return &server.HandlerError{
-						Status:  response.StatusInternalServerError,
-						Message: "Error writing final chunk",
-					}
-				}
+				hashval := sha256.Sum256(fullBody)
 
-				hash := sha256.Sum256(fullBody)
-				hashHex := hex.EncodeToString(hash[:])
-
-				trailers := headers.NewHeaders()
-				trailers.Set("X-Content-SHA256", hashHex)
-				trailers.Set("X-Content-Length", fmt.Sprintf("%d", len(fullBody)))
-
-				err = w.WriteTrailers(trailers)
-				if err != nil {
-					return &server.HandlerError{
-						Status:  response.StatusInternalServerError,
-						Message: "Error writing trailers",
-					}
-				}
-
+				trailer := headers.NewHeaders()
+				trailer.Set("X-content-sha256", fmt.Sprintf("%x", hashval))
+				trailer.Set("X-Content-Length", fmt.Sprintf("%d", len(fullBody)))
+				w.WriteTrailer(trailer)
 				return nil
 			}
+
 		}
 
 		w.WriteStatusLine(status)
@@ -120,9 +94,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error starting server: %v", err)
 	}
+	log.Println("Server started on port", port)
 	defer server.Close()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
+	log.Println("Server gracefully stopped")
 }
