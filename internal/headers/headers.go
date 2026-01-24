@@ -59,7 +59,16 @@ func (h Headers) Get(name string) ([]string, bool) {
 }
 
 func (h Headers) Set(name, value string) {
-	h[name] = []string{value}
+	if v, ok := h[name]; ok {
+		h[name] = append(v, value)
+	} else {
+		h[name] = []string{value}
+	}
+}
+
+func (h Headers) Delete(name string) {
+	name = strings.ToLower(name)
+	delete(h, name)
 }
 
 func (h Headers) ForEach(cb func(string, []string)) {
